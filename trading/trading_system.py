@@ -1,10 +1,13 @@
 # trading/trading_system.py
+
 import logging
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import requests
+
+from utils.analytics_logger import AnalyticsLogger
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,9 @@ class TradingSystem:
         self.min_volume = 1000
         self.min_volatility = 0.001
         self.max_volatility = 0.05
+
+        # Инициализация логгера аналитики
+        self.analytics_logger = AnalyticsLogger()
 
         logger.info(f"""
         =============== Initializing Trading System ===============
@@ -108,6 +114,17 @@ class TradingSystem:
             df['volatility'] = (df['high'] - df['low']) / df['low']
 
             latest = df.iloc[-1]
+
+            # Сохраняем последние значения для аналитики
+            self.latest_indicators = {
+                'rsi': latest['rsi'],
+                'sma_short': latest['sma_short'],
+                'sma_long': latest['sma_long'],
+                'volume_ratio': latest['volume_ratio'],
+                'atr': latest['atr'],
+                'volatility': latest['volatility']
+            }
+
             logger.info(f"""
             Latest Indicator Values for {self.symbol}:
             RSI: {latest['rsi']:.2f}
@@ -251,6 +268,15 @@ class TradingSystem:
                     logger.info(f"Found short signal: {signal}")
                     signals.append(signal)
 
+            # Логируем найденные сигналы
+            for signal in signals:
+                self.analytics_logger.log_signal(signal, {
+                    "symbol": self.symbol,
+                    "rsi": self.latest_indicators['rsi'],
+                    "volume_ratio": self.latest_indicators['volume_ratio'],
+                    "context": context
+                })
+
             logger.info(f"Found {len(signals)} potential signals")
             return signals
 
@@ -294,10 +320,39 @@ class TradingSystem:
                 "signals": signals,
                 "latest_price": df.iloc[-1]['close'],
                 "latest_volume": df.iloc[-1]['volume'],
+                **self.latest_indicators  # Добавляем значения индикаторов
             }
+
+            # Логируем рыночные данные
+            self.analytics_logger.log_market_data(result)
 
             return result
 
         except Exception as e:
             logger.error(f"Error in analysis: {str(e)}", exc_info=True)
             return None
+
+    def get_analytics(self, days=7):
+        """Получение аналитики по торговой паре"""
+        try:
+            signal_stats = self.analytics_logger.get_signal_statistics(days)
+            market_stats = self.analytics_logger.get_market_statistics(days)
+
+            return {
+                "signal_stats": signal_stats,
+                "market_stats": market_stats,
+                "symbol": self.symbol,
+                "timeframe": self.timeframe
+            }
+        except Exception as e:
+            logger.error(f"Error getting analytics: {str(e)}", exc_info=True)
+            return None
+
+    def cleanup_old_data(self, days_to_keep=30):
+        """Очистка старых данных"""
+        try:
+            self.analytics_logger.cleanup_old_data(days_to_keep)
+            logger.info(f"Successfully cleaned up data older than {
+                        days_to_keep} days")
+        except Exception as e:
+            logger.error(f"Error during data cleanup: {str(e)}", exc_info=True)
