@@ -36,7 +36,6 @@ class Routes:
             handler = SimpleRequestHandler(
                 dispatcher=self.dp,
                 bot=self.bot,
-                secret_token=self.bot.token
             )
 
             # Обрабатываем запрос
