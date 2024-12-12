@@ -26,7 +26,7 @@ PORT = int(os.environ.get("PORT", 8080))
 
 # Символы для мониторинга
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOTUSDT"]
-UPDATE_INTERVAL = 180  # 3 минут
+UPDATE_INTERVAL = 50  # 3 минут
 
 
 class TradingBotApp:

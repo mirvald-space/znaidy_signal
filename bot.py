@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 # Символы для мониторинга
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOTUSDT"]
-UPDATE_INTERVAL = 180  # 3 минут
+UPDATE_INTERVAL = 50  # 3 минут
 
 # Хранение подписчиков
 subscribers = set()
