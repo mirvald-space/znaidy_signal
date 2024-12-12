@@ -62,8 +62,8 @@ class MessageTemplates:
 logger = logging.getLogger(__name__)
 
 # Символы для мониторинга
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
-UPDATE_INTERVAL = 300  # 5 минут
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOTUSDT"]
+UPDATE_INTERVAL = 180  # 3 минут
 
 # Хранение подписчиков
 subscribers = set()
