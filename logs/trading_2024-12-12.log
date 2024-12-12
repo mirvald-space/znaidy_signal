@@ -1,0 +1,263 @@
+2024-12-12 22:59:21,395 - INFO - [main:9] - Starting bot
+2024-12-12 22:59:21,395 - INFO - [start_polling:527] - Start polling
+2024-12-12 22:59:21,396 - INFO - [send_signals:69] - Starting signal analysis cycle
+2024-12-12 22:59:21,396 - INFO - [__init__:28] - 
+        =============== Initializing Trading System ===============
+        Symbol: BTCUSDT
+        Timeframe: 1h
+        Risk: 1%
+        Balance: $1000
+        Min Volume: $1000
+        Volatility Range: 0.1% - 5.0%
+        ========================================================
+        
+2024-12-12 22:59:21,396 - INFO - [analyze:264] - 
+==================================================
+Starting analysis for BTCUSDT
+==================================================
+2024-12-12 22:59:21,396 - INFO - [analyze:269] - Step 1: Fetching historical data
+2024-12-12 22:59:21,396 - INFO - [get_historical_data:41] - Fetching historical data for BTCUSDT (100 candles)
+2024-12-12 22:59:21,585 - INFO - [get_historical_data:64] - Successfully fetched 100 candles
+2024-12-12 22:59:21,586 - INFO - [analyze:275] - Step 2: Calculating technical indicators
+2024-12-12 22:59:21,586 - INFO - [calculate_indicators:74] - Calculating technical indicators for BTCUSDT
+2024-12-12 22:59:21,593 - INFO - [calculate_indicators:111] - 
+            Latest Indicator Values for BTCUSDT:
+            RSI: 58.05
+            Short SMA: 100860.58
+            Long SMA: 100942.22
+            Volume Ratio: 2.32
+            ATR: 649.85
+            Volatility: 1.11%
+            
+2024-12-12 22:59:21,593 - INFO - [analyze:281] - Step 3: Analyzing market context
+2024-12-12 22:59:21,593 - INFO - [analyze_market_context:130] - Analyzing market context for BTCUSDT
+2024-12-12 22:59:21,593 - INFO - [analyze_market_context:172] - 
+            Market Context Analysis for BTCUSDT:
+            Trend: downtrend
+            Trend Strength: 0.40
+            Volatility: normal
+            Volume Status: high
+            Suitable for Trading: True
+            
+2024-12-12 22:59:21,593 - INFO - [analyze:287] - Step 4: Searching for trading signals
+2024-12-12 22:59:21,593 - INFO - [find_entry_points:190] - Searching for entry points for BTCUSDT
+2024-12-12 22:59:21,593 - INFO - [find_entry_points:254] - Found 0 potential signals
+2024-12-12 22:59:21,594 - INFO - [send_signals:85] - Sending signals for BTCUSDT to 0 subscribers
+2024-12-12 22:59:21,594 - INFO - [__init__:28] - 
+        =============== Initializing Trading System ===============
+        Symbol: ETHUSDT
+        Timeframe: 1h
+        Risk: 1%
+        Balance: $1000
+        Min Volume: $1000
+        Volatility Range: 0.1% - 5.0%
+        ========================================================
+        
+2024-12-12 22:59:21,594 - INFO - [analyze:264] - 
+==================================================
+Starting analysis for ETHUSDT
+==================================================
+2024-12-12 22:59:21,594 - INFO - [analyze:269] - Step 1: Fetching historical data
+2024-12-12 22:59:21,594 - INFO - [get_historical_data:41] - Fetching historical data for ETHUSDT (100 candles)
+2024-12-12 22:59:21,704 - INFO - [get_historical_data:64] - Successfully fetched 100 candles
+2024-12-12 22:59:21,704 - INFO - [analyze:275] - Step 2: Calculating technical indicators
+2024-12-12 22:59:21,705 - INFO - [calculate_indicators:74] - Calculating technical indicators for ETHUSDT
+2024-12-12 22:59:21,709 - INFO - [calculate_indicators:111] - 
+            Latest Indicator Values for ETHUSDT:
+            RSI: 72.98
+            Short SMA: 3943.77
+            Long SMA: 3890.02
+            Volume Ratio: 2.14
+            ATR: 46.74
+            Volatility: 1.37%
+            
+2024-12-12 22:59:21,709 - INFO - [analyze:281] - Step 3: Analyzing market context
+2024-12-12 22:59:21,709 - INFO - [analyze_market_context:130] - Analyzing market context for ETHUSDT
+2024-12-12 22:59:21,709 - INFO - [analyze_market_context:172] - 
+            Market Context Analysis for ETHUSDT:
+            Trend: uptrend
+            Trend Strength: 0.00
+            Volatility: normal
+            Volume Status: high
+            Suitable for Trading: True
+            
+2024-12-12 22:59:21,709 - INFO - [analyze:287] - Step 4: Searching for trading signals
+2024-12-12 22:59:21,709 - INFO - [find_entry_points:190] - Searching for entry points for ETHUSDT
+2024-12-12 22:59:21,709 - INFO - [find_entry_points:254] - Found 0 potential signals
+2024-12-12 22:59:21,709 - INFO - [send_signals:85] - Sending signals for ETHUSDT to 0 subscribers
+2024-12-12 22:59:21,709 - INFO - [__init__:28] - 
+        =============== Initializing Trading System ===============
+        Symbol: SOLUSDT
+        Timeframe: 1h
+        Risk: 1%
+        Balance: $1000
+        Min Volume: $1000
+        Volatility Range: 0.1% - 5.0%
+        ========================================================
+        
+2024-12-12 22:59:21,709 - INFO - [analyze:264] - 
+==================================================
+Starting analysis for SOLUSDT
+==================================================
+2024-12-12 22:59:21,709 - INFO - [analyze:269] - Step 1: Fetching historical data
+2024-12-12 22:59:21,709 - INFO - [get_historical_data:41] - Fetching historical data for SOLUSDT (100 candles)
+2024-12-12 22:59:21,821 - INFO - [get_historical_data:64] - Successfully fetched 100 candles
+2024-12-12 22:59:21,821 - INFO - [analyze:275] - Step 2: Calculating technical indicators
+2024-12-12 22:59:21,821 - INFO - [calculate_indicators:74] - Calculating technical indicators for SOLUSDT
+2024-12-12 22:59:21,826 - INFO - [calculate_indicators:111] - 
+            Latest Indicator Values for SOLUSDT:
+            RSI: 63.31
+            Short SMA: 230.66
+            Long SMA: 229.75
+            Volume Ratio: 1.63
+            ATR: 2.82
+            Volatility: 1.77%
+            
+2024-12-12 22:59:21,826 - INFO - [analyze:281] - Step 3: Analyzing market context
+2024-12-12 22:59:21,826 - INFO - [analyze_market_context:130] - Analyzing market context for SOLUSDT
+2024-12-12 22:59:21,826 - INFO - [analyze_market_context:172] - 
+            Market Context Analysis for SOLUSDT:
+            Trend: uptrend
+            Trend Strength: 0.67
+            Volatility: normal
+            Volume Status: high
+            Suitable for Trading: True
+            
+2024-12-12 22:59:21,826 - INFO - [analyze:287] - Step 4: Searching for trading signals
+2024-12-12 22:59:21,826 - INFO - [find_entry_points:190] - Searching for entry points for SOLUSDT
+2024-12-12 22:59:21,827 - INFO - [find_entry_points:254] - Found 0 potential signals
+2024-12-12 22:59:21,827 - INFO - [send_signals:85] - Sending signals for SOLUSDT to 0 subscribers
+2024-12-12 22:59:21,827 - INFO - [send_signals:99] - Analysis cycle completed. Waiting 300 seconds
+2024-12-12 22:59:24,951 - INFO - [_polling:341] - Run polling for bot @znaidysignal_bot id=7913364610 - 'cryptobot'
+2024-12-12 22:59:42,926 - INFO - [feed_update:172] - Update id=611554679 is handled. Duration 767 ms by bot id=7913364610
+2024-12-12 22:59:49,047 - INFO - [feed_update:172] - Update id=611554680 is handled. Duration 290 ms by bot id=7913364610
+2024-12-12 22:59:55,420 - INFO - [feed_update:172] - Update id=611554681 is handled. Duration 299 ms by bot id=7913364610
+2024-12-12 23:01:09,043 - INFO - [feed_update:172] - Update id=611554682 is handled. Duration 683 ms by bot id=7913364610
+2024-12-12 23:04:21,837 - INFO - [send_signals:69] - Starting signal analysis cycle
+2024-12-12 23:04:21,840 - INFO - [__init__:28] - 
+        =============== Initializing Trading System ===============
+        Symbol: BTCUSDT
+        Timeframe: 1h
+        Risk: 1%
+        Balance: $1000
+        Min Volume: $1000
+        Volatility Range: 0.1% - 5.0%
+        ========================================================
+        
+2024-12-12 23:04:21,840 - INFO - [analyze:264] - 
+==================================================
+Starting analysis for BTCUSDT
+==================================================
+2024-12-12 23:04:21,840 - INFO - [analyze:269] - Step 1: Fetching historical data
+2024-12-12 23:04:21,840 - INFO - [get_historical_data:41] - Fetching historical data for BTCUSDT (100 candles)
+2024-12-12 23:04:22,042 - INFO - [get_historical_data:64] - Successfully fetched 100 candles
+2024-12-12 23:04:22,042 - INFO - [analyze:275] - Step 2: Calculating technical indicators
+2024-12-12 23:04:22,042 - INFO - [calculate_indicators:74] - Calculating technical indicators for BTCUSDT
+2024-12-12 23:04:22,056 - INFO - [calculate_indicators:111] - 
+            Latest Indicator Values for BTCUSDT:
+            RSI: 61.97
+            Short SMA: 101104.50
+            Long SMA: 100976.04
+            Volume Ratio: 0.21
+            ATR: 630.06
+            Volatility: 0.25%
+            
+2024-12-12 23:04:22,056 - INFO - [analyze:281] - Step 3: Analyzing market context
+2024-12-12 23:04:22,056 - INFO - [analyze_market_context:130] - Analyzing market context for BTCUSDT
+2024-12-12 23:04:22,056 - INFO - [analyze_market_context:172] - 
+            Market Context Analysis for BTCUSDT:
+            Trend: uptrend
+            Trend Strength: 0.60
+            Volatility: normal
+            Volume Status: low
+            Suitable for Trading: False
+            
+2024-12-12 23:04:22,057 - INFO - [analyze:287] - Step 4: Searching for trading signals
+2024-12-12 23:04:22,057 - INFO - [find_entry_points:190] - Searching for entry points for BTCUSDT
+2024-12-12 23:04:22,057 - INFO - [find_entry_points:196] - Market context not suitable for trading, skipping signal search
+2024-12-12 23:04:22,057 - INFO - [send_signals:93] - No significant signals for BTCUSDT
+2024-12-12 23:04:22,057 - INFO - [__init__:28] - 
+        =============== Initializing Trading System ===============
+        Symbol: ETHUSDT
+        Timeframe: 1h
+        Risk: 1%
+        Balance: $1000
+        Min Volume: $1000
+        Volatility Range: 0.1% - 5.0%
+        ========================================================
+        
+2024-12-12 23:04:22,057 - INFO - [analyze:264] - 
+==================================================
+Starting analysis for ETHUSDT
+==================================================
+2024-12-12 23:04:22,057 - INFO - [analyze:269] - Step 1: Fetching historical data
+2024-12-12 23:04:22,057 - INFO - [get_historical_data:41] - Fetching historical data for ETHUSDT (100 candles)
+2024-12-12 23:04:22,167 - INFO - [get_historical_data:64] - Successfully fetched 100 candles
+2024-12-12 23:04:22,167 - INFO - [analyze:275] - Step 2: Calculating technical indicators
+2024-12-12 23:04:22,167 - INFO - [calculate_indicators:74] - Calculating technical indicators for ETHUSDT
+2024-12-12 23:04:22,172 - INFO - [calculate_indicators:111] - 
+            Latest Indicator Values for ETHUSDT:
+            RSI: 76.04
+            Short SMA: 3955.53
+            Long SMA: 3899.05
+            Volume Ratio: 0.15
+            ATR: 45.45
+            Volatility: 0.22%
+            
+2024-12-12 23:04:22,173 - INFO - [analyze:281] - Step 3: Analyzing market context
+2024-12-12 23:04:22,173 - INFO - [analyze_market_context:130] - Analyzing market context for ETHUSDT
+2024-12-12 23:04:22,173 - INFO - [analyze_market_context:172] - 
+            Market Context Analysis for ETHUSDT:
+            Trend: uptrend
+            Trend Strength: 0.00
+            Volatility: normal
+            Volume Status: low
+            Suitable for Trading: False
+            
+2024-12-12 23:04:22,173 - INFO - [analyze:287] - Step 4: Searching for trading signals
+2024-12-12 23:04:22,173 - INFO - [find_entry_points:190] - Searching for entry points for ETHUSDT
+2024-12-12 23:04:22,174 - INFO - [find_entry_points:196] - Market context not suitable for trading, skipping signal search
+2024-12-12 23:04:22,174 - INFO - [send_signals:93] - No significant signals for ETHUSDT
+2024-12-12 23:04:22,175 - INFO - [__init__:28] - 
+        =============== Initializing Trading System ===============
+        Symbol: SOLUSDT
+        Timeframe: 1h
+        Risk: 1%
+        Balance: $1000
+        Min Volume: $1000
+        Volatility Range: 0.1% - 5.0%
+        ========================================================
+        
+2024-12-12 23:04:22,175 - INFO - [analyze:264] - 
+==================================================
+Starting analysis for SOLUSDT
+==================================================
+2024-12-12 23:04:22,175 - INFO - [analyze:269] - Step 1: Fetching historical data
+2024-12-12 23:04:22,175 - INFO - [get_historical_data:41] - Fetching historical data for SOLUSDT (100 candles)
+2024-12-12 23:04:22,290 - INFO - [get_historical_data:64] - Successfully fetched 100 candles
+2024-12-12 23:04:22,290 - INFO - [analyze:275] - Step 2: Calculating technical indicators
+2024-12-12 23:04:22,291 - INFO - [calculate_indicators:74] - Calculating technical indicators for SOLUSDT
+2024-12-12 23:04:22,294 - INFO - [calculate_indicators:111] - 
+            Latest Indicator Values for SOLUSDT:
+            RSI: 67.41
+            Short SMA: 231.18
+            Long SMA: 229.89
+            Volume Ratio: 0.11
+            ATR: 2.72
+            Volatility: 0.28%
+            
+2024-12-12 23:04:22,294 - INFO - [analyze:281] - Step 3: Analyzing market context
+2024-12-12 23:04:22,294 - INFO - [analyze_market_context:130] - Analyzing market context for SOLUSDT
+2024-12-12 23:04:22,294 - INFO - [analyze_market_context:172] - 
+            Market Context Analysis for SOLUSDT:
+            Trend: uptrend
+            Trend Strength: 0.87
+            Volatility: normal
+            Volume Status: low
+            Suitable for Trading: False
+            
+2024-12-12 23:04:22,294 - INFO - [analyze:287] - Step 4: Searching for trading signals
+2024-12-12 23:04:22,294 - INFO - [find_entry_points:190] - Searching for entry points for SOLUSDT
+2024-12-12 23:04:22,294 - INFO - [find_entry_points:196] - Market context not suitable for trading, skipping signal search
+2024-12-12 23:04:22,295 - INFO - [send_signals:93] - No significant signals for SOLUSDT
+2024-12-12 23:04:22,295 - INFO - [send_signals:99] - Analysis cycle completed. Waiting 300 seconds
