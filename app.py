@@ -1,17 +1,14 @@
-# app.py
-
 import asyncio
 import logging
 import os
 
 from aiogram import Bot, Dispatcher
-from aiogram.types import WebhookInfo
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
-from handlers import BotHandlers
 
 from background_tasks import BackgroundTasks
 from config import load_config
+from handlers import BotHandlers
 
 # Настройка логирования
 logging.basicConfig(
@@ -50,6 +47,8 @@ class TradingBotApp:
                     allowed_updates=webhook_info.allowed_updates
                 )
                 logger.info("Webhook set to: %s", WEBHOOK_URL)
+            else:
+                logger.info("Webhook is already set to: %s", WEBHOOK_URL)
         except Exception as e:
             logger.error("Failed to set webhook: %s", str(e))
             raise
@@ -90,7 +89,7 @@ class TradingBotApp:
         webhook_handler = SimpleRequestHandler(
             dispatcher=self.dp,
             bot=self.bot,
-            secret_token=config.tg_bot.token
+            secret_token=config.tg_bot.secret_token  # Убедитесь, что этот токен задан
         )
 
         # Добавляем маршрут для вебхука
@@ -116,7 +115,9 @@ class TradingBotApp:
                     "pending_update_count": webhook_info.pending_update_count
                 },
                 "background_tasks": tasks_status,
-                "subscribers_count": len(self.handlers.get_subscribers())
+                "subscribers_count": len(self.handlers.get_subscribers()),
+                "symbols": SYMBOLS,
+                "update_interval": UPDATE_INTERVAL
             }
 
             return web.json_response(health_data)
