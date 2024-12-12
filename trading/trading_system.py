@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from string import Template
 
 import numpy as np
 import pandas as pd
@@ -10,6 +11,38 @@ import requests
 from utils.analytics_logger import AnalyticsLogger
 
 logger = logging.getLogger(__name__)
+
+
+class LogTemplates:
+    INIT = Template("""
+        =============== Initializing Trading System ===============
+        Symbol: $symbol
+        Timeframe: $timeframe
+        Risk: $risk%
+        Balance: $$$balance
+        Min Volume: $$$min_volume
+        Volatility Range: $min_vol% - $max_vol%
+        ========================================================
+        """)
+
+    INDICATORS = Template("""
+            Latest Indicator Values for $symbol:
+            RSI: $rsi
+            Short SMA: $sma_short
+            Long SMA: $sma_long
+            Volume Ratio: $volume_ratio
+            ATR: $atr
+            Volatility: $volatility%
+            """)
+
+    MARKET_CONTEXT = Template("""
+            Market Context Analysis for $symbol:
+            Trend: $trend
+            Trend Strength: $strength
+            Volatility: $volatility
+            Volume Status: $volume
+            Suitable for Trading: $suitable
+            """)
 
 
 class TradingSystem:
@@ -31,21 +64,21 @@ class TradingSystem:
         # Инициализация логгера аналитики
         self.analytics_logger = AnalyticsLogger()
 
-        logger.info(f"""
-        =============== Initializing Trading System ===============
-        Symbol: {self.symbol}
-        Timeframe: {self.timeframe}
-        Risk: {self.risk_percent}%
-        Balance: ${self.balance}
-        Min Volume: ${self.min_volume}
-        Volatility Range: {self.min_volatility*100}% - {self.max_volatility*100}%
-        ========================================================
-        """)
+        init_message = LogTemplates.INIT.substitute(
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            risk=self.risk_percent,
+            balance=self.balance,
+            min_volume=self.min_volume,
+            min_vol=self.min_volatility * 100,
+            max_vol=self.max_volatility * 100
+        )
+        logger.info(init_message)
 
     def get_historical_data(self, limit=100):
         """Получение исторических данных"""
-        logger.info(f"Fetching historical data for {
-                    self.symbol} ({limit} candles)")
+        logger.info("Fetching historical data for {} ({} candles)".format(
+            self.symbol, limit))
         try:
             params = {
                 "symbol": self.symbol,
@@ -53,7 +86,8 @@ class TradingSystem:
                 "limit": limit
             }
 
-            response = requests.get(f"{self.base_url}/klines", params=params)
+            response = requests.get(
+                "{}/klines".format(self.base_url), params=params)
             response.raise_for_status()
             data = response.json()
 
@@ -67,17 +101,18 @@ class TradingSystem:
             for col in ['open', 'high', 'low', 'close', 'volume']:
                 df[col] = df[col].astype(float)
 
-            logger.info(f"Successfully fetched {len(data)} candles")
+            logger.info("Successfully fetched {} candles".format(len(data)))
             return df
 
         except Exception as e:
-            logger.error(f"Failed to fetch historical data: {
-                         str(e)}", exc_info=True)
+            logger.error("Failed to fetch historical data: {}".format(
+                str(e)), exc_info=True)
             return None
 
     def calculate_indicators(self, df):
         """Расчет технических индикаторов"""
-        logger.info(f"Calculating technical indicators for {self.symbol}")
+        logger.info(
+            "Calculating technical indicators for {}".format(self.symbol))
         try:
             # RSI
             delta = df['close'].diff()
@@ -114,8 +149,6 @@ class TradingSystem:
             df['volatility'] = (df['high'] - df['low']) / df['low']
 
             latest = df.iloc[-1]
-
-            # Сохраняем последние значения для аналитики
             self.latest_indicators = {
                 'rsi': latest['rsi'],
                 'sma_short': latest['sma_short'],
@@ -125,29 +158,29 @@ class TradingSystem:
                 'volatility': latest['volatility']
             }
 
-            logger.info(f"""
-            Latest Indicator Values for {self.symbol}:
-            RSI: {latest['rsi']:.2f}
-            Short SMA: {latest['sma_short']:.2f}
-            Long SMA: {latest['sma_long']:.2f}
-            Volume Ratio: {latest['volume_ratio']:.2f}
-            ATR: {latest['atr']:.2f}
-            Volatility: {latest['volatility']*100:.2f}%
-            """)
+            indicators_message = LogTemplates.INDICATORS.substitute(
+                symbol=self.symbol,
+                rsi="{:.2f}".format(latest['rsi']),
+                sma_short="{:.2f}".format(latest['sma_short']),
+                sma_long="{:.2f}".format(latest['sma_long']),
+                volume_ratio="{:.2f}".format(latest['volume_ratio']),
+                atr="{:.2f}".format(latest['atr']),
+                volatility="{:.2f}".format(latest['volatility'] * 100)
+            )
+            logger.info(indicators_message)
 
             return df
 
         except Exception as e:
-            logger.error(f"Error calculating indicators: {
-                         str(e)}", exc_info=True)
+            logger.error("Error calculating indicators: {}".format(
+                str(e)), exc_info=True)
             return None
 
     def analyze_market_context(self, df):
         """Анализ рыночного контекста"""
-        logger.info(f"Analyzing market context for {self.symbol}")
+        logger.info("Analyzing market context for {}".format(self.symbol))
         try:
             latest = df.iloc[-1]
-
             context = {
                 "trend": "undefined",
                 "strength": 0,
@@ -186,25 +219,26 @@ class TradingSystem:
                 latest['volume'] >= self.min_volume
             )
 
-            logger.info(f"""
-            Market Context Analysis for {self.symbol}:
-            Trend: {context['trend']}
-            Trend Strength: {context['strength']:.2f}
-            Volatility: {context['volatility']}
-            Volume Status: {context['volume']}
-            Suitable for Trading: {context['suitable_for_trading']}
-            """)
+            context_message = LogTemplates.MARKET_CONTEXT.substitute(
+                symbol=self.symbol,
+                trend=context['trend'],
+                strength="{:.2f}".format(context['strength']),
+                volatility=context['volatility'],
+                volume=context['volume'],
+                suitable=str(context['suitable_for_trading'])
+            )
+            logger.info(context_message)
 
             return context
 
         except Exception as e:
-            logger.error(f"Error analyzing market context: {
-                         str(e)}", exc_info=True)
+            logger.error("Error analyzing market context: {}".format(
+                str(e)), exc_info=True)
             return None
 
     def find_entry_points(self, df, context):
         """Поиск точек входа"""
-        logger.info(f"Searching for entry points for {self.symbol}")
+        logger.info("Searching for entry points for {}".format(self.symbol))
         try:
             latest = df.iloc[-1]
             signals = []
@@ -225,7 +259,7 @@ class TradingSystem:
                         "stop_loss": latest['low'],
                         "take_profit": latest['close'] + (latest['close'] - latest['low']) * 2
                     }
-                    logger.info(f"Found long signal: {signal}")
+                    logger.info("Found long signal: {}".format(signal))
                     signals.append(signal)
 
                 # Bollinger отскок
@@ -238,7 +272,7 @@ class TradingSystem:
                         "stop_loss": latest['bb_lower'] * 0.99,
                         "take_profit": latest['bb_middle']
                     }
-                    logger.info(f"Found long signal: {signal}")
+                    logger.info("Found long signal: {}".format(signal))
                     signals.append(signal)
 
             elif context['trend'] == "downtrend":
@@ -252,7 +286,7 @@ class TradingSystem:
                         "stop_loss": latest['high'],
                         "take_profit": latest['close'] - (latest['high'] - latest['close']) * 2
                     }
-                    logger.info(f"Found short signal: {signal}")
+                    logger.info("Found short signal: {}".format(signal))
                     signals.append(signal)
 
                 # Bollinger отскок
@@ -265,7 +299,7 @@ class TradingSystem:
                         "stop_loss": latest['bb_upper'] * 1.01,
                         "take_profit": latest['bb_middle']
                     }
-                    logger.info(f"Found short signal: {signal}")
+                    logger.info("Found short signal: {}".format(signal))
                     signals.append(signal)
 
             # Логируем найденные сигналы
@@ -277,18 +311,18 @@ class TradingSystem:
                     "context": context
                 })
 
-            logger.info(f"Found {len(signals)} potential signals")
+            logger.info("Found {} potential signals".format(len(signals)))
             return signals
 
         except Exception as e:
-            logger.error(f"Error finding entry points: {
-                         str(e)}", exc_info=True)
+            logger.error("Error finding entry points: {}".format(
+                str(e)), exc_info=True)
             return []
 
     def analyze(self):
         """Основной метод анализа"""
-        logger.info(
-            f"\n{'='*50}\nStarting analysis for {self.symbol}\n{'='*50}")
+        logger.info("\n{0}\nStarting analysis for {1}\n{0}".format(
+            "="*50, self.symbol))
 
         try:
             # Получение данных
@@ -320,7 +354,7 @@ class TradingSystem:
                 "signals": signals,
                 "latest_price": df.iloc[-1]['close'],
                 "latest_volume": df.iloc[-1]['volume'],
-                **self.latest_indicators  # Добавляем значения индикаторов
+                **self.latest_indicators
             }
 
             # Логируем рыночные данные
@@ -329,30 +363,29 @@ class TradingSystem:
             return result
 
         except Exception as e:
-            logger.error(f"Error in analysis: {str(e)}", exc_info=True)
+            logger.error("Error in analysis: {}".format(str(e)), exc_info=True)
             return None
 
     def get_analytics(self, days=7):
         """Получение аналитики по торговой паре"""
         try:
-            signal_stats = self.analytics_logger.get_signal_statistics(days)
-            market_stats = self.analytics_logger.get_market_statistics(days)
-
             return {
-                "signal_stats": signal_stats,
-                "market_stats": market_stats,
+                "signal_stats": self.analytics_logger.get_signal_statistics(days),
+                "market_stats": self.analytics_logger.get_market_statistics(days),
                 "symbol": self.symbol,
                 "timeframe": self.timeframe
             }
         except Exception as e:
-            logger.error(f"Error getting analytics: {str(e)}", exc_info=True)
+            logger.error("Error getting analytics: {}".format(
+                str(e)), exc_info=True)
             return None
 
     def cleanup_old_data(self, days_to_keep=30):
         """Очистка старых данных"""
         try:
             self.analytics_logger.cleanup_old_data(days_to_keep)
-            logger.info(f"Successfully cleaned up data older than {
-                        days_to_keep} days")
+            logger.info(
+                "Successfully cleaned up data older than {} days".format(days_to_keep))
         except Exception as e:
-            logger.error(f"Error during data cleanup: {str(e)}", exc_info=True)
+            logger.error("Error during data cleanup: {}".format(
+                str(e)), exc_info=True)
