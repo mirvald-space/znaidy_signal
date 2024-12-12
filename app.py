@@ -25,8 +25,8 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 PORT = int(os.environ.get("PORT", 8080))
 
 # Символы для мониторинга
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
-UPDATE_INTERVAL = 300  # 5 минут
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOTUSDT"]
+UPDATE_INTERVAL = 180  # 3 минут
 
 
 class TradingBotApp:
