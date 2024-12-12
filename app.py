@@ -89,7 +89,6 @@ class TradingBotApp:
         webhook_handler = SimpleRequestHandler(
             dispatcher=self.dp,
             bot=self.bot,
-            secret_token=config.tg_bot.token  # Убедитесь, что этот токен задан
         )
 
         # Добавляем маршрут для вебхука
