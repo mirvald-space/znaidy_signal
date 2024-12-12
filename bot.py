@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from string import Template
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -14,6 +15,49 @@ from trading.signal_formatter import format_signal_message
 from trading.trading_system import TradingSystem
 from utils.analytics_logger import AnalyticsLogger
 
+
+# Шаблоны сообщений
+class MessageTemplates:
+    START_MESSAGE = Template("""
+👋 Привет! Я бот для отслеживания криптовалютных сигналов.
+
+Доступные команды:
+/start - Подписаться на сигналы
+/stop - Отписаться от сигналов
+/status - Текущий статус анализа
+/symbols - Список отслеживаемых символов
+/stats - Статистика сигналов
+/analysis - Текущий анализ рынка
+/settings - Настройки уведомлений""")
+
+    STATUS_MESSAGE = Template("""
+📊 Текущий статус системы:
+Активных подписчиков: $subscribers
+Отслеживаемые пары: $symbols
+Интервал обновления: $interval секунд
+
+Статистика за последние 24 часа:
+Проанализировано: $analyzed записей
+Найдено возможностей: $opportunities
+Средняя сила тренда: $trend_strength""")
+
+    SYMBOL_INFO = Template("""$trend_emoji $symbol
+   Цена: $price
+   Тренд: $trend
+   Подходит для торговли: $suitable
+""")
+
+    STATS_HEADER = Template("""
+📊 Статистика за $period:
+Всего сигналов: $total_signals
+Средняя сила сигналов: $avg_strength""")
+
+    ANALYSIS_SIGNAL = Template("""- $type ($reason)
+  Вход: $entry
+  Стоп: $stop_loss
+  Цель: $take_profit""")
+
+
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
@@ -21,7 +65,7 @@ logger = logging.getLogger(__name__)
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
 UPDATE_INTERVAL = 300  # 5 минут
 
-# Хранение подписчиков (в реальном приложении лучше использовать базу данных)
+# Хранение подписчиков
 subscribers = set()
 
 # Инициализация бота
@@ -31,7 +75,6 @@ dp = Dispatcher()
 
 
 def get_statistics_keyboard():
-    """Создание клавиатуры для статистики"""
     builder = InlineKeyboardBuilder()
     builder.button(text="24 часа", callback_data="stats_1")
     builder.button(text="7 дней", callback_data="stats_7")
@@ -42,83 +85,61 @@ def get_statistics_keyboard():
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    """Обработчик команды /start"""
     subscribers.add(message.from_user.id)
-    await message.answer(
-        "👋 Привет! Я бот для отслеживания криптовалютных сигналов.\n\n"
-        "Доступные команды:\n"
-        "/start - Подписаться на сигналы\n"
-        "/stop - Отписаться от сигналов\n"
-        "/status - Текущий статус анализа\n"
-        "/symbols - Список отслеживаемых символов\n"
-        "/stats - Статистика сигналов\n"
-        "/analysis - Текущий анализ рынка\n"
-        "/settings - Настройки уведомлений"
-    )
+    await message.answer(MessageTemplates.START_MESSAGE.substitute())
 
 
 @dp.message(Command("stop"))
 async def cmd_stop(message: Message):
-    """Обработчик команды /stop"""
     subscribers.discard(message.from_user.id)
     await message.answer("Вы отписались от уведомлений. Используйте /start чтобы подписаться снова.")
 
 
 @dp.message(Command("status"))
 async def cmd_status(message: Message):
-    """Обработчик команды /status"""
     analytics = AnalyticsLogger()
-    status_message = [
-        "📊 Текущий статус системы:",
-        f"Активных подписчиков: {len(subscribers)}",
-        f"Отслеживаемые пары: {', '.join(SYMBOLS)}",
-        f"Интервал обновления: {UPDATE_INTERVAL} секунд",
-        "",
-        "Статистика за последние 24 часа:",
-    ]
-
-    # Получаем статистику за последние 24 часа
     market_stats = analytics.get_market_statistics(1)
-    status_message.extend([
-        f"Проанализировано: {market_stats['records_analyzed']} записей",
-        f"Найдено возможностей: {market_stats['trading_opportunities']}",
-        f"Средняя сила тренда: {market_stats.get('avg_trend_strength', 0):.2f}"
-    ])
 
-    await message.answer("\n".join(status_message))
+    status = MessageTemplates.STATUS_MESSAGE.substitute(
+        subscribers=len(subscribers),
+        symbols=", ".join(SYMBOLS),
+        interval=UPDATE_INTERVAL,
+        analyzed=market_stats['records_analyzed'],
+        opportunities=market_stats['trading_opportunities'],
+        trend_strength="{:.2f}".format(
+            market_stats.get('avg_trend_strength', 0))
+    )
+
+    await message.answer(status)
 
 
 @dp.message(Command("symbols"))
 async def cmd_symbols(message: Message):
-    """Обработчик команды /symbols"""
     analytics = AnalyticsLogger()
-    market_stats = analytics.get_market_statistics(1)  # За последние 24 часа
-
     symbols_message = ["📈 Отслеживаемые торговые пары:\n"]
 
     for symbol in SYMBOLS:
-        # Получаем статистику по символу
         trader = TradingSystem(symbol)
         analysis = trader.analyze()
 
         if analysis:
             trend = analysis['context']['trend']
             trend_emoji = "↗️" if trend == "uptrend" else "↘️" if trend == "downtrend" else "↔️"
-            suitable = "✅" if analysis['context']['suitable_for_trading'] else "❌"
 
-            symbols_message.append(
-                f"{trend_emoji} {symbol}\n"
-                f"   Цена: {analysis['latest_price']:.2f}\n"
-                f"   Тренд: {trend}\n"
-                f"   Подходит для торговли: {suitable}\n"
+            symbol_info = MessageTemplates.SYMBOL_INFO.substitute(
+                trend_emoji=trend_emoji,
+                symbol=symbol,
+                price="{:.2f}".format(analysis['latest_price']),
+                trend=trend,
+                suitable="✅" if analysis['context']['suitable_for_trading'] else "❌"
             )
+            symbols_message.append(symbol_info)
 
     await message.answer("".join(symbols_message))
 
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: Message):
-    """Обработчик команды /stats"""
     await message.answer(
         "📊 Выберите период для статистики:",
         reply_markup=get_statistics_keyboard()
@@ -127,36 +148,38 @@ async def cmd_stats(message: Message):
 
 @dp.callback_query(lambda c: c.data.startswith('stats_'))
 async def process_stats_callback(callback_query: CallbackQuery):
-    """Обработчик нажатий кнопок статистики"""
     days = int(callback_query.data.split('_')[1])
     analytics = AnalyticsLogger()
 
     signal_stats = analytics.get_signal_statistics(days)
     market_stats = analytics.get_market_statistics(days)
 
-    period_name = "24 часа" if days == 1 else f"{days} дней"
+    period_name = "24 часа" if days == 1 else "{} дней".format(days)
 
-    stats_message = [
-        f"📊 Статистика за {period_name}:\n",
-        f"Всего сигналов: {signal_stats['total_signals']}",
-        f"Средняя сила сигналов: {signal_stats.get('avg_strength', 0):.2f}",
-        "\nРаспределение по типам:"
-    ]
+    stats_header = MessageTemplates.STATS_HEADER.substitute(
+        period=period_name,
+        total_signals=signal_stats['total_signals'],
+        avg_strength="{:.2f}".format(signal_stats.get('avg_strength', 0))
+    )
+
+    stats_message = [stats_header, "\nРаспределение по типам:"]
 
     for type_, count in signal_stats.get('by_type', {}).items():
-        stats_message.append(f"- {type_}: {count}")
+        stats_message.append("- {}: {}".format(type_, count))
 
     stats_message.extend([
         "\nРыночная статистика:",
-        f"Проанализировано: {market_stats['records_analyzed']} записей",
-        f"Торговых возможностей: {market_stats['trading_opportunities']}",
-        f"Средняя сила тренда: {market_stats.get(
-            'avg_trend_strength', 0):.2f}",
+        "Проанализировано: {} записей".format(
+            market_stats['records_analyzed']),
+        "Торговых возможностей: {}".format(
+            market_stats['trading_opportunities']),
+        "Средняя сила тренда: {:.2f}".format(
+            market_stats.get('avg_trend_strength', 0)),
         "\nРаспределение трендов:"
     ])
 
     for trend, count in market_stats.get('trend_distribution', {}).items():
-        stats_message.append(f"- {trend}: {count}")
+        stats_message.append("- {}: {}".format(trend, count))
 
     await callback_query.message.answer("\n".join(stats_message))
     await callback_query.answer()
@@ -164,7 +187,6 @@ async def process_stats_callback(callback_query: CallbackQuery):
 
 @dp.message(Command("analysis"))
 async def cmd_analysis(message: Message):
-    """Обработчик команды /analysis - текущий анализ всех пар"""
     analysis_message = ["📈 Текущий анализ рынка:\n"]
 
     for symbol in SYMBOLS:
@@ -173,30 +195,34 @@ async def cmd_analysis(message: Message):
             analysis = trader.analyze()
 
             if analysis:
-                analysis_message.append(f"\n{symbol}:")
-                analysis_message.append(
-                    f"Цена: {analysis['latest_price']:.2f}")
-                analysis_message.append(
-                    f"Тренд: {analysis['context']['trend']}")
-                analysis_message.append(
-                    f"Сила тренда: {analysis['context']['strength']:.2f}")
-                analysis_message.append(f"RSI: {analysis.get('rsi', 0):.2f}")
+                symbol_analysis = [
+                    "\n{}:".format(symbol),
+                    "Цена: {:.2f}".format(analysis['latest_price']),
+                    "Тренд: {}".format(analysis['context']['trend']),
+                    "Сила тренда: {:.2f}".format(
+                        analysis['context']['strength']),
+                    "RSI: {:.2f}".format(analysis.get('rsi', 0))
+                ]
 
                 if analysis['signals']:
-                    analysis_message.append("\nАктивные сигналы:")
+                    symbol_analysis.append("\nАктивные сигналы:")
                     for signal in analysis['signals']:
-                        analysis_message.extend([
-                            f"- {signal['type'].upper()} ({signal['reason']})",
-                            f"  Вход: {signal['entry']:.2f}",
-                            f"  Стоп: {signal['stop_loss']:.2f}",
-                            f"  Цель: {signal['take_profit']:.2f}"
-                        ])
+                        signal_info = MessageTemplates.ANALYSIS_SIGNAL.substitute(
+                            type=signal['type'].upper(),
+                            reason=signal['reason'],
+                            entry="{:.2f}".format(signal['entry']),
+                            stop_loss="{:.2f}".format(signal['stop_loss']),
+                            take_profit="{:.2f}".format(signal['take_profit'])
+                        )
+                        symbol_analysis.append(signal_info)
                 else:
-                    analysis_message.append("Нет активных сигналов")
+                    symbol_analysis.append("Нет активных сигналов")
+
+                analysis_message.extend(symbol_analysis)
 
         except Exception as e:
-            logger.error(f"Error analyzing {symbol}: {e}")
-            analysis_message.append(f"\n{symbol}: Ошибка анализа")
+            logger.error("Error analyzing {}: {}".format(symbol, e))
+            analysis_message.append("\n{}: Ошибка анализа".format(symbol))
 
     # Разбиваем на части если сообщение слишком длинное
     max_length = 4096
@@ -205,7 +231,7 @@ async def cmd_analysis(message: Message):
     current_length = 0
 
     for line in analysis_message:
-        line_length = len(line) + 1  # +1 для \n
+        line_length = len(line) + 1
         if current_length + line_length > max_length:
             message_parts.append("\n".join(current_part))
             current_part = [line]
@@ -217,13 +243,11 @@ async def cmd_analysis(message: Message):
     if current_part:
         message_parts.append("\n".join(current_part))
 
-    # Отправляем части сообщения
     for part in message_parts:
         await message.answer(part)
 
 
 async def send_signals():
-    """Отправка сигналов подписчикам"""
     while True:
         try:
             logger.info("Starting signal analysis cycle")
@@ -234,57 +258,53 @@ async def send_signals():
                     analysis = trader.analyze()
 
                     if not analysis:
-                        logger.warning(f"No analysis results for {symbol}")
+                        logger.warning(
+                            "No analysis results for {}".format(symbol))
                         continue
 
-                    # Форматируем сообщение
                     message = format_signal_message(analysis)
 
-                    # Отправляем только если есть сигналы или подходит для торговли
                     if analysis['signals'] or analysis['context']['suitable_for_trading']:
-                        logger.info(f"Sending signals for {symbol} to {
-                                    len(subscribers)} subscribers")
+                        logger.info("Sending signals for {} to {} subscribers".format(
+                            symbol, len(subscribers)))
                         for user_id in subscribers:
                             try:
                                 await bot.send_message(user_id, message)
-                                # Небольшая задержка между отправками
                                 await asyncio.sleep(0.1)
                             except Exception as e:
-                                logger.error(f"Error sending message to {
-                                             user_id}: {e}")
+                                logger.error(
+                                    "Error sending message to {}: {}".format(user_id, e))
                                 if "blocked" in str(e).lower():
                                     subscribers.discard(user_id)
                     else:
-                        logger.info(f"No significant signals for {symbol}")
+                        logger.info(
+                            "No significant signals for {}".format(symbol))
 
                 except Exception as e:
-                    logger.error(f"Error processing {symbol}: {e}")
+                    logger.error("Error processing {}: {}".format(symbol, e))
                     continue
 
-            # Очистка старых данных раз в день
             if datetime.now().hour == 0:
                 for symbol in SYMBOLS:
                     try:
                         trader = TradingSystem(symbol)
-                        trader.cleanup_old_data(30)  # Храним данные за 30 дней
+                        trader.cleanup_old_data(30)
                     except Exception as e:
                         logger.error(
-                            f"Error cleaning up data for {symbol}: {e}")
+                            "Error cleaning up data for {}: {}".format(symbol, e))
 
-            logger.info(f"Analysis cycle completed. Waiting {
-                        UPDATE_INTERVAL} seconds")
+            logger.info(
+                "Analysis cycle completed. Waiting {} seconds".format(UPDATE_INTERVAL))
             await asyncio.sleep(UPDATE_INTERVAL)
 
         except Exception as e:
-            logger.error(f"Error in send_signals: {e}")
-            await asyncio.sleep(60)  # Ждем минуту перед повторной попыткой
+            logger.error("Error in send_signals: {}".format(e))
+            await asyncio.sleep(60)
 
 
 async def main():
     logging.info("Starting bot")
-    # Запускаем отправку сигналов в фоновом режиме
     asyncio.create_task(send_signals())
-    # Запускаем бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
