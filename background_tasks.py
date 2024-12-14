@@ -1,12 +1,16 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from aiogram import Bot
 
 from config import TradingConfig
-from trading.signal_formatter import format_signal_message
+from trading.signal_formatter import (
+    add_market_context,
+    format_pre_signal_message,
+    format_signal_message,
+)
 from trading.trading_system import TradingSystem
 from utils.analytics_logger import AnalyticsLogger
 
@@ -28,6 +32,9 @@ class BackgroundTasks:
         self.tasks = {}
         self.is_running = False
         self.analytics_logger = AnalyticsLogger()
+
+        # Кэш последних сигналов для предотвращения дублирования
+        self.signal_cache = {}
 
     async def start(self):
         """Запуск фоновых задач"""
@@ -55,68 +62,111 @@ class BackgroundTasks:
         self.tasks.clear()
         logger.info("All background tasks stopped")
 
-    async def analyze_symbol(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def is_signal_duplicate(self, symbol: str, signal_type: str, entry: float, timestamp: datetime) -> bool:
         """
-        Анализ отдельного символа
+        Проверка на дубликат сигнала
         Args:
-            symbol: Символ для анализа
+            symbol: Торговый символ
+            signal_type: Тип сигнала
+            entry: Цена входа
+            timestamp: Время сигнала
         Returns:
-            Dict с результатами анализа или None в случае ошибки
+            bool: True если сигнал дубликат
         """
-        try:
-            trader = TradingSystem(symbol)
-            analysis = trader.analyze()
+        cache_key = f"{symbol}_{signal_type}"
+        if cache_key in self.signal_cache:
+            last_signal = self.signal_cache[cache_key]
+            time_diff = (timestamp - last_signal['timestamp']).total_seconds()
+            price_diff = abs(
+                entry - last_signal['entry']) / last_signal['entry']
 
-            if not analysis:
-                logger.warning(f"No analysis results for {symbol}")
-                return None
+            # Считаем сигнал дубликатом если прошло менее 30 минут и цена изменилась менее чем на 0.5%
+            if time_diff < 1800 and price_diff < 0.005:
+                return True
 
-            return analysis
+        # Обновляем кэш
+        self.signal_cache[cache_key] = {
+            'timestamp': timestamp,
+            'entry': entry
+        }
+        return False
 
-        except Exception as e:
-            logger.error(f"Error analyzing {symbol}: {str(e)}", exc_info=True)
-            return None
-
-    async def send_signals(self, symbol: str, analysis: Dict[str, Any]):
+    async def send_messages(self, messages: List[str], priority: bool = False):
         """
-        Отправка сигналов подписчикам
+        Отправка сообщений подписчикам с учетом приоритета
         Args:
-            symbol: Символ
+            messages: Список сообщений для отправки
+            priority: Приоритетность сообщений
+        """
+        subscribers_count = len(self.subscribers)
+        batch_size = 25 if priority else 15
+        delay = 0.1 if priority else 0.3
+
+        for i in range(0, subscribers_count, batch_size):
+            batch = list(self.subscribers)[i:i + batch_size]
+
+            for user_id in batch:
+                try:
+                    for message in messages:
+                        await self.bot.send_message(user_id, message)
+                        await asyncio.sleep(delay)
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "blocked" in error_msg or "chat not found" in error_msg:
+                        logger.info(f"Removing blocked user: {user_id}")
+                        self.subscribers.discard(user_id)
+                    else:
+                        logger.error(f"Error sending message to {
+                                     user_id}: {str(e)}")
+
+            # Пауза между батчами
+            await asyncio.sleep(1)
+
+    async def process_signals(self, symbol: str, analysis: Dict[str, Any]):
+        """
+        Обработка сигналов и отправка уведомлений
+        Args:
+            symbol: Торговый символ
             analysis: Результаты анализа
         """
         try:
-            if analysis['signals'] or analysis['context']['suitable_for_trading']:
-                message = format_signal_message(analysis)
-                subscribers_count = len(self.subscribers)
+            timestamp = datetime.now()
+            messages = []
 
-                logger.info(f"Sending {symbol} signal to {
-                            subscribers_count} subscribers")
+            # Обработка предварительных сигналов
+            for pre_signal in analysis.get('pre_signals', []):
+                # Отправляем только вероятные сигналы
+                if pre_signal['probability'] >= 0.6:
+                    if not self.is_signal_duplicate(symbol, pre_signal['type'], pre_signal['current_price'], timestamp):
+                        message = format_pre_signal_message(
+                            symbol, pre_signal, timestamp)
+                        message = add_market_context(
+                            message, analysis['context'])
+                        messages.append(message)
 
-                # Отправляем сообщения батчами
-                batch_size = 25
-                for i in range(0, subscribers_count, batch_size):
-                    batch = list(self.subscribers)[i:i + batch_size]
+            if messages:
+                logger.info(
+                    f"Sending {len(messages)} pre-signals for {symbol}")
+                await self.send_messages(messages)
 
-                    for user_id in batch:
-                        try:
-                            await self.bot.send_message(user_id, message)
-                            # Небольшая задержка между отправками
-                            await asyncio.sleep(0.1)
-                        except Exception as e:
-                            error_msg = str(e).lower()
-                            if "blocked" in error_msg or "chat not found" in error_msg:
-                                logger.info(
-                                    f"Removing blocked user: {user_id}")
-                                self.subscribers.discard(user_id)
-                            else:
-                                logger.error(f"Error sending message to {
-                                             user_id}: {str(e)}")
+            # Обработка основных сигналов
+            signal_messages = []
+            for signal in analysis.get('signals', []):
+                if signal['strength'] >= 0.7:  # Отправляем только сильные сигналы
+                    if not self.is_signal_duplicate(symbol, signal['type'], signal['entry'], timestamp):
+                        message = format_signal_message(
+                            symbol, signal, timestamp)
+                        message = add_market_context(
+                            message, analysis['context'])
+                        signal_messages.append(message)
 
-                    # Пауза между батчами
-                    await asyncio.sleep(1)
+            if signal_messages:
+                logger.info(
+                    f"Sending {len(signal_messages)} signals for {symbol}")
+                await self.send_messages(signal_messages, priority=True)
 
         except Exception as e:
-            logger.error(f"Error sending signals for {
+            logger.error(f"Error processing signals for {
                          symbol}: {str(e)}", exc_info=True)
 
     async def signal_analysis_loop(self):
@@ -128,18 +178,25 @@ class BackgroundTasks:
 
                 for symbol in self.config.symbols:
                     try:
-                        analysis_result = await self.analyze_symbol(symbol)
-                        if analysis_result:
-                            await self.send_signals(symbol, analysis_result)
+                        clean_symbol = str(symbol).strip('[]"\' ').upper()
+                        logger.info(f"Processing symbol: {clean_symbol}")
+
+                        trader = TradingSystem(clean_symbol)
+                        analysis = trader.analyze()
+
+                        if analysis:
+                            await self.process_signals(clean_symbol, analysis)
+                        else:
+                            logger.warning(
+                                f"No analysis results for {clean_symbol}")
+
                     except Exception as e:
                         logger.error(f"Error processing {symbol}: {
                                      str(e)}", exc_info=True)
 
-                # Логируем время выполнения цикла
                 execution_time = (datetime.now() - start_time).total_seconds()
                 logger.info(f"Analysis cycle completed in {
                             execution_time:.2f} seconds")
-
                 await asyncio.sleep(self.config.update_interval)
 
             except asyncio.CancelledError:
@@ -154,15 +211,20 @@ class BackgroundTasks:
         """Периодическая очистка старых данных"""
         while self.is_running:
             try:
-                if datetime.now().hour == 0:  # Запускаем очистку в начале каждого дня
+                current_hour = datetime.now().hour
+
+                # Запускаем очистку в начале каждого дня
+                if current_hour == 0:
                     logger.info("Starting daily data cleanup")
 
                     for symbol in self.config.symbols:
                         try:
-                            trader = TradingSystem(symbol)
+                            clean_symbol = str(symbol).strip('[]"\' ').upper()
+                            trader = TradingSystem(clean_symbol)
                             # Храним данные за 30 дней
                             trader.cleanup_old_data(30)
-                            logger.info(f"Cleaned up old data for {symbol}")
+                            logger.info(f"Cleaned up old data for {
+                                        clean_symbol}")
                         except Exception as e:
                             logger.error(f"Error cleaning up data for {
                                          symbol}: {str(e)}")
@@ -174,6 +236,10 @@ class BackgroundTasks:
                     except Exception as e:
                         logger.error(
                             f"Error cleaning up analytics data: {str(e)}")
+
+                    # Очищаем кэш сигналов
+                    self.signal_cache.clear()
+                    logger.info("Signal cache cleared")
 
                 await asyncio.sleep(3600)  # Проверяем каждый час
 
@@ -191,16 +257,33 @@ class BackgroundTasks:
         Returns:
             Dict со статусом задач
         """
-        return {
-            "is_running": self.is_running,
-            "active_tasks": {
-                name: {
-                    "running": not task.done(),
-                    "exception": str(task.exception()) if task.done() and task.exception() else None
-                }
-                for name, task in self.tasks.items()
-            },
-            "subscribers_count": len(self.subscribers),
-            "symbols": self.config.symbols,
-            "update_interval": self.config.update_interval
-        }
+        try:
+            # Получаем статистику по сигналам
+            signal_stats = self.analytics_logger.get_signal_statistics(
+                1)  # За последние 24 часа
+
+            return {
+                "is_running": self.is_running,
+                "active_tasks": {
+                    name: {
+                        "running": not task.done(),
+                        "exception": str(task.exception()) if task.done() and task.exception() else None
+                    }
+                    for name, task in self.tasks.items()
+                },
+                "trading": {
+                    "symbols": self.config.symbols,
+                    "update_interval": self.config.update_interval,
+                    "signals_24h": signal_stats.get('total_signals', 0),
+                    "avg_strength": signal_stats.get('avg_strength', 0)
+                },
+                "subscribers_count": len(self.subscribers),
+                "last_update": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error getting status: {str(e)}", exc_info=True)
+            return {
+                "error": str(e),
+                "is_running": self.is_running,
+                "last_update": datetime.now().isoformat()
+            }
