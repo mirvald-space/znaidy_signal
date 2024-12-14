@@ -1,6 +1,5 @@
 # utils/analytics_logger.py
 import csv
-import json
 import os
 from datetime import datetime
 from typing import Any, Dict

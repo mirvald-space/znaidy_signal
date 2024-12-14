@@ -47,7 +47,10 @@ class LogTemplates:
 
 class TradingSystem:
     def __init__(self, symbol, timeframe="1h", risk_percent=1, balance=1000):
-        self.symbol = symbol.upper()
+        # Проверяем и очищаем символ от лишних символов
+        if isinstance(symbol, (list, tuple)):
+            symbol = symbol[0]
+        self.symbol = str(symbol).strip('[]"\' ').upper()
         self.timeframe = timeframe
         self.risk_percent = risk_percent
         self.balance = balance

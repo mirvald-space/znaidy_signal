@@ -1,109 +1,95 @@
 import asyncio
 import logging
-import os
+from typing import Optional
 
 from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
 from background_tasks import BackgroundTasks
-from config import load_config
+from config import Config, load_config
 from handlers import BotHandlers
-
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Конфигурация
-config = load_config()
-WEBHOOK_HOST = os.environ.get("WEBHOOK_URL", "https://your-app.onrender.com")
-WEBHOOK_PATH = f"/webhook/{config.tg_bot.token}"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-PORT = int(os.environ.get("PORT", 8080))
-
-# Символы для мониторинга
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOTUSDT"]
-UPDATE_INTERVAL = 50  # 3 минут
+from utils.logger import setup_logger
 
 
 class TradingBotApp:
-    def __init__(self):
-        self.bot = Bot(token=config.tg_bot.token)
+    def __init__(self, config: Optional[Config] = None):
+        """
+        Инициализация приложения
+        Args:
+            config: Конфигурация приложения. Если не указана, загружается из переменных окружения
+        """
+        self.config = config or load_config()
+        self.logger = setup_logger(self.config.logging)
+
+        # Инициализация компонентов бота
+        self.bot = Bot(token=self.config.tg_bot.token)
         self.dp = Dispatcher()
-        self.handlers = None
-        self.background_tasks = None
-        self.app = None
+        self.handlers = BotHandlers(self.bot, self.config.trading)
+        self.dp.include_router(self.handlers.get_router())
+
+        # Инициализация фоновых задач
+        self.background_tasks = BackgroundTasks(
+            bot=self.bot,
+            config=self.config.trading,
+            subscribers=self.handlers.get_subscribers()
+        )
 
     async def setup_webhook(self):
         """Настройка вебхука"""
         try:
             webhook_info = await self.bot.get_webhook_info()
-            if webhook_info.url != WEBHOOK_URL:
+            self.logger.info(f"Current webhook info: {webhook_info}")
+
+            if webhook_info.url != self.config.webhook.url:
+                self.logger.info(f"Setting webhook to: {
+                                 self.config.webhook.url}")
+                await self.bot.delete_webhook()  # Clear existing webhook first
+                # Small delay to ensure webhook is cleared
+                await asyncio.sleep(1)
+
                 await self.bot.set_webhook(
-                    url=WEBHOOK_URL,
-                    allowed_updates=webhook_info.allowed_updates
+                    url=self.config.webhook.url,
+                    allowed_updates=['message', 'callback_query'],
+                    drop_pending_updates=True
                 )
-                logger.info("Webhook set to: %s", WEBHOOK_URL)
+                self.logger.info("Webhook set successfully")
             else:
-                logger.info("Webhook is already set to: %s", WEBHOOK_URL)
+                self.logger.info(f"Webhook is already set correctly to: {
+                                 self.config.webhook.url}")
+
+            # Verify webhook was set
+            new_webhook_info = await self.bot.get_webhook_info()
+            self.logger.info(f"Verified webhook info: {new_webhook_info}")
         except Exception as e:
-            logger.error("Failed to set webhook: %s", str(e))
+            self.logger.error(f"Error setting webhook: {
+                              str(e)}", exc_info=True)
             raise
 
     async def on_startup(self, app: web.Application):
         """Действия при запуске приложения"""
         try:
-            # Настройка вебхука
             await self.setup_webhook()
-
-            # Запуск фоновых задач
             await self.background_tasks.start()
-
-            logger.info("Application startup completed successfully")
+            self.logger.info("Application startup completed successfully")
         except Exception as e:
-            logger.error("Error during startup: %s", str(e))
+            self.logger.error(f"Error during startup: {str(e)}")
             raise
 
     async def on_shutdown(self, app: web.Application):
         """Действия при остановке приложения"""
         try:
-            # Останавливаем фоновые задачи
             await self.background_tasks.stop()
-
-            # Удаляем вебхук
             await self.bot.delete_webhook()
-
-            # Закрываем соединения
             await self.bot.session.close()
-
-            logger.info("Application shutdown completed successfully")
+            self.logger.info("Application shutdown completed successfully")
         except Exception as e:
-            logger.error("Error during shutdown: %s", str(e))
+            self.logger.error(f"Error during shutdown: {str(e)}")
 
-    def setup_routes(self, app: web.Application):
-        """Настройка маршрутов"""
-        # Создаем обработчик вебхука
-        webhook_handler = SimpleRequestHandler(
-            dispatcher=self.dp,
-            bot=self.bot,
-        )
-
-        # Добавляем маршрут для вебхука
-        webhook_handler.register(app, path=WEBHOOK_PATH)
-
-        # Добавляем маршрут для проверки здоровья
-        app.router.add_get("/health", self.health_check)
-
-    async def health_check(self, request: web.Request):
+    async def health_check(self, request: web.Request) -> web.Response:
         """Проверка здоровья приложения"""
         try:
-            # Получаем статус фоновых задач
             tasks_status = await self.background_tasks.get_status()
-
-            # Проверяем webhook
             webhook_info = await self.bot.get_webhook_info()
 
             health_data = {
@@ -115,82 +101,77 @@ class TradingBotApp:
                 },
                 "background_tasks": tasks_status,
                 "subscribers_count": len(self.handlers.get_subscribers()),
-                "symbols": SYMBOLS,
-                "update_interval": UPDATE_INTERVAL
+                "symbols": self.config.trading.symbols,
+                "update_interval": self.config.trading.update_interval
             }
 
             return web.json_response(health_data)
         except Exception as e:
-            logger.error("Health check failed: %s", str(e))
+            self.logger.error(f"Health check failed: {str(e)}")
             return web.json_response(
                 {"status": "unhealthy", "error": str(e)},
                 status=500
             )
 
-    async def create_app(self):
+    def setup_routes(self, app: web.Application):
+        """Настройка маршрутов"""
+        # Создаем обработчик вебхука
+        webhook_handler = SimpleRequestHandler(
+            dispatcher=self.dp,
+            bot=self.bot,
+        )
+        # Настраиваем маршруты
+        webhook_handler.register(app, path=self.config.webhook.path)
+        app.router.add_get("/health", self.health_check)
+        app.router.add_get("/", lambda r: web.json_response({
+            "name": "Trading Bot API",
+            "version": "1.0.0",
+            "status": "running"
+        }))
+
+    async def create_app(self) -> web.Application:
         """Создание и настройка приложения"""
+        app = web.Application()
+        self.setup_routes(app)
+        app.on_startup.append(self.on_startup)
+        app.on_shutdown.append(self.on_shutdown)
+        return app
+
+    async def run(self):
+        """Запуск приложения"""
         try:
-            # Инициализация компонентов
-            self.handlers = BotHandlers(self.bot, SYMBOLS, UPDATE_INTERVAL)
-            self.dp.include_router(self.handlers.get_router())
+            app = await self.create_app()
+            runner = web.AppRunner(app)
+            await runner.setup()
 
-            self.background_tasks = BackgroundTasks(
-                self.bot,
-                SYMBOLS,
-                UPDATE_INTERVAL,
-                self.handlers.get_subscribers()
+            site = web.TCPSite(
+                runner,
+                host='0.0.0.0',
+                port=self.config.webhook.port
             )
+            await site.start()
 
-            # Создание приложения
-            app = web.Application()
+            self.logger.info(f"Application started on port {
+                             self.config.webhook.port}")
 
-            # Настройка маршрутов
-            self.setup_routes(app)
+            try:
+                await asyncio.Event().wait()
+            except (KeyboardInterrupt, SystemExit):
+                self.logger.info("Shutting down...")
+            finally:
+                await runner.cleanup()
 
-            # Добавляем обработчики запуска/остановки
-            app.on_startup.append(self.on_startup)
-            app.on_shutdown.append(self.on_shutdown)
-
-            return app
         except Exception as e:
-            logger.error("Failed to create application: %s", str(e))
+            self.logger.error(f"Failed to start application: {str(e)}")
             raise
 
 
-async def start_app():
-    """Запуск приложения"""
-    try:
-        # Создаем экземпляр приложения
-        trading_bot = TradingBotApp()
-        app = await trading_bot.create_app()
-
-        # Настраиваем runner
-        runner = web.AppRunner(app)
-        await runner.setup()
-
-        # Запускаем сайт
-        site = web.TCPSite(runner, host='0.0.0.0', port=PORT)
-        await site.start()
-
-        logger.info("Application started on port %d", PORT)
-
-        # Держим приложение запущенным
-        try:
-            await asyncio.Event().wait()
-        except (KeyboardInterrupt, SystemExit):
-            logger.info("Shutting down...")
-        finally:
-            await runner.cleanup()
-
-    except Exception as e:
-        logger.error("Failed to start application: %s", str(e))
-        raise
-
 if __name__ == '__main__':
     try:
-        asyncio.run(start_app())
+        app = TradingBotApp()
+        asyncio.run(app.run())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Application stopped by user")
+        logging.info("Application stopped by user")
     except Exception as e:
-        logger.error("Application crashed: %s", str(e))
+        logging.error(f"Application crashed: {str(e)}")
         exit(1)
