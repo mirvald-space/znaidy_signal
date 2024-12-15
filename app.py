@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from string import Template
 from typing import Optional
 
 from aiogram import Bot, Dispatcher
@@ -10,6 +11,18 @@ from background_tasks import BackgroundTasks
 from config import Config, load_config
 from handlers import BotHandlers
 from utils.logger import setup_logger
+
+
+class LogTemplates:
+    WEBHOOK_INFO = Template("Current webhook info: $info")
+    SETTING_WEBHOOK = Template("Setting webhook to: $url")
+    WEBHOOK_VERIFIED = Template("Verified webhook info: $info")
+    WEBHOOK_ERROR = Template("Error setting webhook: $error")
+    WEBHOOK_SET = Template("Webhook is already set correctly to: $url")
+    STARTUP_ERROR = Template("Error during startup: $error")
+    SHUTDOWN_ERROR = Template("Error during shutdown: $error")
+    APP_START = Template("Application started on port $port")
+    APP_CRASH = Template("Application crashed: $error")
 
 
 class TradingBotApp:
@@ -39,11 +52,12 @@ class TradingBotApp:
         """Настройка вебхука"""
         try:
             webhook_info = await self.bot.get_webhook_info()
-            self.logger.info(f"Current webhook info: {webhook_info}")
+            self.logger.info(LogTemplates.WEBHOOK_INFO.substitute(
+                info=str(webhook_info)))
 
             if webhook_info.url != self.config.webhook.url:
-                self.logger.info(f"Setting webhook to: {
-                                 self.config.webhook.url}")
+                self.logger.info(LogTemplates.SETTING_WEBHOOK.substitute(
+                    url=self.config.webhook.url))
                 await self.bot.delete_webhook()  # Clear existing webhook first
                 # Small delay to ensure webhook is cleared
                 await asyncio.sleep(1)
@@ -55,15 +69,16 @@ class TradingBotApp:
                 )
                 self.logger.info("Webhook set successfully")
             else:
-                self.logger.info(f"Webhook is already set correctly to: {
-                                 self.config.webhook.url}")
+                self.logger.info(LogTemplates.WEBHOOK_SET.substitute(
+                    url=self.config.webhook.url))
 
             # Verify webhook was set
             new_webhook_info = await self.bot.get_webhook_info()
-            self.logger.info(f"Verified webhook info: {new_webhook_info}")
+            self.logger.info(LogTemplates.WEBHOOK_VERIFIED.substitute(
+                info=str(new_webhook_info)))
         except Exception as e:
-            self.logger.error(f"Error setting webhook: {
-                              str(e)}", exc_info=True)
+            self.logger.error(LogTemplates.WEBHOOK_ERROR.substitute(
+                error=str(e)), exc_info=True)
             raise
 
     async def on_startup(self, app: web.Application):
@@ -73,7 +88,8 @@ class TradingBotApp:
             await self.background_tasks.start()
             self.logger.info("Application startup completed successfully")
         except Exception as e:
-            self.logger.error(f"Error during startup: {str(e)}")
+            self.logger.error(
+                LogTemplates.STARTUP_ERROR.substitute(error=str(e)))
             raise
 
     async def on_shutdown(self, app: web.Application):
@@ -84,7 +100,8 @@ class TradingBotApp:
             await self.bot.session.close()
             self.logger.info("Application shutdown completed successfully")
         except Exception as e:
-            self.logger.error(f"Error during shutdown: {str(e)}")
+            self.logger.error(
+                LogTemplates.SHUTDOWN_ERROR.substitute(error=str(e)))
 
     async def health_check(self, request: web.Request) -> web.Response:
         """Проверка здоровья приложения"""
@@ -107,7 +124,7 @@ class TradingBotApp:
 
             return web.json_response(health_data)
         except Exception as e:
-            self.logger.error(f"Health check failed: {str(e)}")
+            self.logger.error("Health check failed: " + str(e))
             return web.json_response(
                 {"status": "unhealthy", "error": str(e)},
                 status=500
@@ -151,8 +168,8 @@ class TradingBotApp:
             )
             await site.start()
 
-            self.logger.info(f"Application started on port {
-                             self.config.webhook.port}")
+            self.logger.info(LogTemplates.APP_START.substitute(
+                port=str(self.config.webhook.port)))
 
             try:
                 await asyncio.Event().wait()
@@ -162,7 +179,7 @@ class TradingBotApp:
                 await runner.cleanup()
 
         except Exception as e:
-            self.logger.error(f"Failed to start application: {str(e)}")
+            self.logger.error(LogTemplates.APP_CRASH.substitute(error=str(e)))
             raise
 
 
@@ -173,5 +190,5 @@ if __name__ == '__main__':
     except (KeyboardInterrupt, SystemExit):
         logging.info("Application stopped by user")
     except Exception as e:
-        logging.error(f"Application crashed: {str(e)}")
+        logging.error("Application crashed: " + str(e))
         exit(1)
