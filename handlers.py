@@ -1,4 +1,5 @@
 import logging
+from string import Template
 from typing import Any, Dict, List, Set
 
 from aiogram import Bot, F, Router
@@ -26,21 +27,49 @@ class MessageTemplates:
 /analysis - Текущий анализ рынка
 /settings - Настройки уведомлений"""
 
-    STATUS = """
+    STATUS = Template("""
 📊 Текущий статус системы:
-Активных подписчиков: {subscribers}
-Отслеживаемые пары: {symbols}
-Интервал обновления: {interval} секунд
+Активных подписчиков: $subscribers
+Отслеживаемые пары: $symbols
+Интервал обновления: $interval секунд
 
 Статистика за последние 24 часа:
-Проанализировано: {analyzed} записей
-Найдено возможностей: {opportunities}
-Средняя сила тренда: {trend_strength:.2f}"""
+Проанализировано: $analyzed записей
+Найдено возможностей: $opportunities
+Средняя сила тренда: $trend_strength""")
 
-    SYMBOL_STATUS = """{trend_emoji} {symbol}
-   Цена: {price:.2f}
-   Тренд: {trend}
-   Подходит для торговли: {suitable}"""
+    SYMBOL_STATUS = Template("""$trend_emoji $symbol
+   Цена: $price
+   Тренд: $trend
+   Подходит для торговли: $suitable""")
+
+    STOP = "Вы отписались от уведомлений. Используйте /start чтобы подписаться снова."
+    STATS_PROMPT = "📊 Выберите период для статистики:"
+
+    SYMBOL_ERROR = Template("$symbol - Ошибка анализа: $error\n")
+    SYMBOLS_HEADER = "📈 Отслеживаемые торговые пары:\n"
+
+    STATS_HEADER = Template("📊 Статистика за $period:\n")
+    STATS_SIGNALS = Template(
+        "Всего сигналов: $total\nСредняя сила сигналов: $strength")
+    STATS_TYPE_HEADER = "\nРаспределение по типам:"
+    STATS_TYPE_LINE = Template("- $type: $count")
+    STATS_MARKET_HEADER = "\nРыночная статистика:"
+    STATS_MARKET = Template("""Проанализировано: $analyzed записей
+Торговых возможностей: $opportunities
+Средняя сила тренда: $trend_strength""")
+    STATS_TRENDS_HEADER = "\nРаспределение трендов:"
+    STATS_TREND_LINE = Template("- $trend: $count")
+
+    ANALYSIS_HEADER = "📈 Текущий анализ рынка:\n"
+    ANALYSIS_ERROR = Template("\n$symbol: Ошибка анализа: $error")
+
+    SETTINGS = Template("""⚙️ Настройки уведомлений:
+🔄 Интервал обновления: $interval секунд
+📊 Отслеживаемые пары: $symbols
+📈 Таймфрейм: $timeframe
+
+Для изменения настроек обратитесь к администратору""")
 
 
 class BotHandlers:
@@ -78,28 +107,27 @@ class BotHandlers:
         @self.router.message(Command("stop"))
         async def cmd_stop(message: Message):
             self.subscribers.discard(message.from_user.id)
-            await message.answer(
-                "Вы отписались от уведомлений. Используйте /start чтобы подписаться снова."
-            )
+            await message.answer(MessageTemplates.STOP)
 
         @self.router.message(Command("status"))
         async def cmd_status(message: Message):
             market_stats = self.analytics.get_market_statistics(1)
 
-            status = MessageTemplates.STATUS.format(
+            status = MessageTemplates.STATUS.substitute(
                 subscribers=len(self.subscribers),
                 symbols=", ".join(self.config.symbols),
                 interval=self.config.update_interval,
                 analyzed=market_stats['records_analyzed'],
                 opportunities=market_stats['trading_opportunities'],
-                trend_strength=market_stats.get('avg_trend_strength', 0)
+                trend_strength="{:.2f}".format(
+                    market_stats.get('avg_trend_strength', 0))
             )
 
             await message.answer(status)
 
         @self.router.message(Command("symbols"))
         async def cmd_symbols(message: Message):
-            symbols_message = ["📈 Отслеживаемые торговые пары:\n"]
+            symbols_message = [MessageTemplates.SYMBOLS_HEADER]
 
             for symbol in self.config.symbols:
                 try:
@@ -110,35 +138,36 @@ class BotHandlers:
                         trend = analysis['context']['trend']
                         trend_emoji = self.get_trend_emoji(trend)
 
-                        symbol_info = MessageTemplates.SYMBOL_STATUS.format(
+                        symbol_info = MessageTemplates.SYMBOL_STATUS.substitute(
                             trend_emoji=trend_emoji,
                             symbol=symbol,
-                            price=analysis['latest_price'],
+                            price="{:.2f}".format(analysis['latest_price']),
                             trend=trend,
                             suitable="✅" if analysis['context']['suitable_for_trading'] else "❌"
                         )
                         symbols_message.append(symbol_info)
                 except Exception as e:
-                    symbols_message.append(
-                        f"{symbol} - Ошибка анализа: {str(e)}\n")
+                    symbols_message.append(MessageTemplates.SYMBOL_ERROR.substitute(
+                        symbol=symbol,
+                        error=str(e)
+                    ))
 
             await message.answer("\n".join(symbols_message))
 
         @self.router.message(Command("stats"))
         async def cmd_stats(message: Message):
             await message.answer(
-                "📊 Выберите период для статистики:",
+                MessageTemplates.STATS_PROMPT,
                 reply_markup=self.get_statistics_keyboard()
             )
 
         @self.router.callback_query(F.data.startswith('stats_'))
         async def process_stats_callback(callback: CallbackQuery):
             days = int(callback.data.split('_')[1])
+            period_name = "24 часа" if days == 1 else f"{days} дней"
 
             signal_stats = self.analytics.get_signal_statistics(days)
             market_stats = self.analytics.get_market_statistics(days)
-
-            period_name = "24 часа" if days == 1 else f"{days} дней"
 
             stats_message = self.format_stats_message(
                 period_name, signal_stats, market_stats
@@ -150,20 +179,15 @@ class BotHandlers:
         @self.router.message(Command("analysis"))
         async def cmd_analysis(message: Message):
             analysis_messages = await self.perform_market_analysis()
-
-            # Отправляем сообщения частями из-за ограничений Telegram
             for msg in analysis_messages:
                 await message.answer(msg)
 
         @self.router.message(Command("settings"))
         async def cmd_settings(message: Message):
-            settings = (
-                "⚙️ Настройки уведомлений:\n"
-                f"🔄 Интервал обновления: {
-                    self.config.update_interval} секунд\n"
-                f"📊 Отслеживаемые пары: {', '.join(self.config.symbols)}\n"
-                f"📈 Таймфрейм: {self.config.timeframe}\n"
-                "\nДля изменения настроек обратитесь к администратору"
+            settings = MessageTemplates.SETTINGS.substitute(
+                interval=self.config.update_interval,
+                symbols=", ".join(self.config.symbols),
+                timeframe=self.config.timeframe
             )
             await message.answer(settings)
 
@@ -178,36 +202,45 @@ class BotHandlers:
     def format_stats_message(self, period: str, signal_stats: Dict, market_stats: Dict) -> List[str]:
         """Форматирование сообщения со статистикой"""
         stats_message = [
-            f"📊 Статистика за {period}:\n",
-            f"Всего сигналов: {signal_stats['total_signals']}",
-            f"Средняя сила сигналов: {
-                signal_stats.get('avg_strength', 0):.2f}",
-            "\nРаспределение по типам:"
+            MessageTemplates.STATS_HEADER.substitute(period=period),
+            MessageTemplates.STATS_SIGNALS.substitute(
+                total=signal_stats['total_signals'],
+                strength="{:.2f}".format(signal_stats.get('avg_strength', 0))
+            ),
+            MessageTemplates.STATS_TYPE_HEADER
         ]
 
-        # Добавляем статистику по типам сигналов
+        # Статистика по типам сигналов
         for type_, count in signal_stats.get('by_type', {}).items():
-            stats_message.append(f"- {type_}: {count}")
+            stats_message.append(MessageTemplates.STATS_TYPE_LINE.substitute(
+                type=type_,
+                count=count
+            ))
 
-        # Добавляем рыночную статистику
+        # Рыночная статистика
         stats_message.extend([
-            "\nРыночная статистика:",
-            f"Проанализировано: {market_stats['records_analyzed']} записей",
-            f"Торговых возможностей: {market_stats['trading_opportunities']}",
-            f"Средняя сила тренда: {market_stats.get(
-                'avg_trend_strength', 0):.2f}",
-            "\nРаспределение трендов:"
+            MessageTemplates.STATS_MARKET_HEADER,
+            MessageTemplates.STATS_MARKET.substitute(
+                analyzed=market_stats['records_analyzed'],
+                opportunities=market_stats['trading_opportunities'],
+                trend_strength="{:.2f}".format(
+                    market_stats.get('avg_trend_strength', 0))
+            ),
+            MessageTemplates.STATS_TRENDS_HEADER
         ])
 
-        # Добавляем распределение трендов
+        # Распределение трендов
         for trend, count in market_stats.get('trend_distribution', {}).items():
-            stats_message.append(f"- {trend}: {count}")
+            stats_message.append(MessageTemplates.STATS_TREND_LINE.substitute(
+                trend=trend,
+                count=count
+            ))
 
         return stats_message
 
     async def perform_market_analysis(self) -> List[str]:
         """Выполнение анализа рынка"""
-        analysis_message = ["📈 Текущий анализ рынка:\n"]
+        analysis_message = [MessageTemplates.ANALYSIS_HEADER]
         current_message_length = 0
         messages = []
 
@@ -217,10 +250,8 @@ class BotHandlers:
                 analysis = trader.analyze()
 
                 if analysis:
-                    # Форматируем сообщение для текущего символа
                     symbol_analysis = format_signal_message(analysis)
 
-                    # Проверяем, не превысит ли добавление нового анализа лимит
                     if current_message_length + len(symbol_analysis) > 4000:
                         messages.append("\n".join(analysis_message))
                         analysis_message = []
@@ -230,8 +261,10 @@ class BotHandlers:
                     current_message_length += len(symbol_analysis)
 
             except Exception as e:
-                analysis_message.append(
-                    f"\n{symbol}: Ошибка анализа: {str(e)}")
+                analysis_message.append(MessageTemplates.ANALYSIS_ERROR.substitute(
+                    symbol=symbol,
+                    error=str(e)
+                ))
 
         if analysis_message:
             messages.append("\n".join(analysis_message))
