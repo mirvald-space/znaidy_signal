@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
+from string import Template
 from typing import Any, Dict, List, Optional, Set
 
 from aiogram import Bot
@@ -15,6 +16,22 @@ from trading.trading_system import TradingSystem
 from utils.analytics_logger import AnalyticsLogger
 
 logger = logging.getLogger(__name__)
+
+
+class LogTemplates:
+    TASK_STOPPED = Template("Task $task_name stopped")
+    BLOCKED_USER = Template("Removing blocked user: $user_id")
+    SEND_ERROR = Template("Error sending message to $user_id: $error")
+    SIGNALS_COUNT = Template("Sending $count $signal_type for $symbol")
+    SYMBOL_PROCESS = Template("Processing symbol: $symbol")
+    NO_ANALYSIS = Template("No analysis results for $symbol")
+    SYMBOL_ERROR = Template("Error processing $symbol: $error")
+    CYCLE_TIME = Template("Analysis cycle completed in $time seconds")
+    ANALYSIS_ERROR = Template("Error in signal analysis loop: $error")
+    CLEANUP_SYMBOL = Template("Cleaned up old data for $symbol")
+    CLEANUP_ERROR = Template("Error cleaning up data for $symbol: $error")
+    ANALYTICS_ERROR = Template("Error cleaning up analytics data: $error")
+    STATUS_ERROR = Template("Error getting status: $error")
 
 
 class BackgroundTasks:
@@ -32,8 +49,6 @@ class BackgroundTasks:
         self.tasks = {}
         self.is_running = False
         self.analytics_logger = AnalyticsLogger()
-
-        # Кэш последних сигналов для предотвращения дублирования
         self.signal_cache = {}
 
     async def start(self):
@@ -58,7 +73,8 @@ class BackgroundTasks:
                     await task
                 except asyncio.CancelledError:
                     pass
-                logger.info(f"Task {task_name} stopped")
+                logger.info(LogTemplates.TASK_STOPPED.substitute(
+                    task_name=task_name))
         self.tasks.clear()
         logger.info("All background tasks stopped")
 
@@ -73,18 +89,16 @@ class BackgroundTasks:
         Returns:
             bool: True если сигнал дубликат
         """
-        cache_key = f"{symbol}_{signal_type}"
+        cache_key = "_".join([symbol, signal_type])
         if cache_key in self.signal_cache:
             last_signal = self.signal_cache[cache_key]
             time_diff = (timestamp - last_signal['timestamp']).total_seconds()
             price_diff = abs(
                 entry - last_signal['entry']) / last_signal['entry']
 
-            # Считаем сигнал дубликатом если прошло менее 30 минут и цена изменилась менее чем на 0.5%
             if time_diff < 1800 and price_diff < 0.005:
                 return True
 
-        # Обновляем кэш
         self.signal_cache[cache_key] = {
             'timestamp': timestamp,
             'entry': entry
@@ -113,13 +127,15 @@ class BackgroundTasks:
                 except Exception as e:
                     error_msg = str(e).lower()
                     if "blocked" in error_msg or "chat not found" in error_msg:
-                        logger.info(f"Removing blocked user: {user_id}")
+                        logger.info(
+                            LogTemplates.BLOCKED_USER.substitute(user_id=user_id))
                         self.subscribers.discard(user_id)
                     else:
-                        logger.error(f"Error sending message to {
-                                     user_id}: {str(e)}")
+                        logger.error(LogTemplates.SEND_ERROR.substitute(
+                            user_id=user_id,
+                            error=str(e)
+                        ))
 
-            # Пауза между батчами
             await asyncio.sleep(1)
 
     async def process_signals(self, symbol: str, analysis: Dict[str, Any]):
@@ -133,9 +149,7 @@ class BackgroundTasks:
             timestamp = datetime.now()
             messages = []
 
-            # Обработка предварительных сигналов
             for pre_signal in analysis.get('pre_signals', []):
-                # Отправляем только вероятные сигналы
                 if pre_signal['probability'] >= 0.6:
                     if not self.is_signal_duplicate(symbol, pre_signal['type'], pre_signal['current_price'], timestamp):
                         message = format_pre_signal_message(
@@ -145,14 +159,16 @@ class BackgroundTasks:
                         messages.append(message)
 
             if messages:
-                logger.info(
-                    f"Sending {len(messages)} pre-signals for {symbol}")
+                logger.info(LogTemplates.SIGNALS_COUNT.substitute(
+                    count=len(messages),
+                    signal_type='pre-signals',
+                    symbol=symbol
+                ))
                 await self.send_messages(messages)
 
-            # Обработка основных сигналов
             signal_messages = []
             for signal in analysis.get('signals', []):
-                if signal['strength'] >= 0.7:  # Отправляем только сильные сигналы
+                if signal['strength'] >= 0.7:
                     if not self.is_signal_duplicate(symbol, signal['type'], signal['entry'], timestamp):
                         message = format_signal_message(
                             symbol, signal, timestamp)
@@ -161,13 +177,18 @@ class BackgroundTasks:
                         signal_messages.append(message)
 
             if signal_messages:
-                logger.info(
-                    f"Sending {len(signal_messages)} signals for {symbol}")
+                logger.info(LogTemplates.SIGNALS_COUNT.substitute(
+                    count=len(signal_messages),
+                    signal_type='signals',
+                    symbol=symbol
+                ))
                 await self.send_messages(signal_messages, priority=True)
 
         except Exception as e:
-            logger.error(f"Error processing signals for {
-                         symbol}: {str(e)}", exc_info=True)
+            logger.error(LogTemplates.SYMBOL_ERROR.substitute(
+                symbol=symbol,
+                error=str(e)
+            ), exc_info=True)
 
     async def signal_analysis_loop(self):
         """Основной цикл анализа сигналов"""
@@ -179,7 +200,8 @@ class BackgroundTasks:
                 for symbol in self.config.symbols:
                     try:
                         clean_symbol = str(symbol).strip('[]"\' ').upper()
-                        logger.info(f"Processing symbol: {clean_symbol}")
+                        logger.info(LogTemplates.SYMBOL_PROCESS.substitute(
+                            symbol=clean_symbol))
 
                         trader = TradingSystem(clean_symbol)
                         analysis = trader.analyze()
@@ -188,23 +210,25 @@ class BackgroundTasks:
                             await self.process_signals(clean_symbol, analysis)
                         else:
                             logger.warning(
-                                f"No analysis results for {clean_symbol}")
+                                LogTemplates.NO_ANALYSIS.substitute(symbol=clean_symbol))
 
                     except Exception as e:
-                        logger.error(f"Error processing {symbol}: {
-                                     str(e)}", exc_info=True)
+                        logger.error(LogTemplates.SYMBOL_ERROR.substitute(
+                            symbol=symbol,
+                            error=str(e)
+                        ), exc_info=True)
 
                 execution_time = (datetime.now() - start_time).total_seconds()
-                logger.info(f"Analysis cycle completed in {
-                            execution_time:.2f} seconds")
+                logger.info(LogTemplates.CYCLE_TIME.substitute(
+                    time=f"{execution_time:.2f}"))
                 await asyncio.sleep(self.config.update_interval)
 
             except asyncio.CancelledError:
                 logger.info("Signal analysis task cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in signal analysis loop: {
-                             str(e)}", exc_info=True)
+                logger.error(LogTemplates.ANALYSIS_ERROR.substitute(
+                    error=str(e)), exc_info=True)
                 await asyncio.sleep(60)
 
     async def data_cleanup_loop(self):
@@ -213,7 +237,6 @@ class BackgroundTasks:
             try:
                 current_hour = datetime.now().hour
 
-                # Запускаем очистку в начале каждого дня
                 if current_hour == 0:
                     logger.info("Starting daily data cleanup")
 
@@ -221,34 +244,33 @@ class BackgroundTasks:
                         try:
                             clean_symbol = str(symbol).strip('[]"\' ').upper()
                             trader = TradingSystem(clean_symbol)
-                            # Храним данные за 30 дней
                             trader.cleanup_old_data(30)
-                            logger.info(f"Cleaned up old data for {
-                                        clean_symbol}")
+                            logger.info(LogTemplates.CLEANUP_SYMBOL.substitute(
+                                symbol=clean_symbol))
                         except Exception as e:
-                            logger.error(f"Error cleaning up data for {
-                                         symbol}: {str(e)}")
+                            logger.error(LogTemplates.CLEANUP_ERROR.substitute(
+                                symbol=symbol,
+                                error=str(e)
+                            ))
 
-                    # Очищаем аналитику
                     try:
                         self.analytics_logger.cleanup_old_data(30)
                         logger.info("Analytics data cleanup completed")
                     except Exception as e:
                         logger.error(
-                            f"Error cleaning up analytics data: {str(e)}")
+                            LogTemplates.ANALYTICS_ERROR.substitute(error=str(e)))
 
-                    # Очищаем кэш сигналов
                     self.signal_cache.clear()
                     logger.info("Signal cache cleared")
 
-                await asyncio.sleep(3600)  # Проверяем каждый час
+                await asyncio.sleep(3600)
 
             except asyncio.CancelledError:
                 logger.info("Data cleanup task cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in data cleanup loop: {
-                             str(e)}", exc_info=True)
+                logger.error(LogTemplates.ANALYSIS_ERROR.substitute(
+                    error=str(e)), exc_info=True)
                 await asyncio.sleep(3600)
 
     async def get_status(self) -> Dict[str, Any]:
@@ -258,9 +280,7 @@ class BackgroundTasks:
             Dict со статусом задач
         """
         try:
-            # Получаем статистику по сигналам
-            signal_stats = self.analytics_logger.get_signal_statistics(
-                1)  # За последние 24 часа
+            signal_stats = self.analytics_logger.get_signal_statistics(1)
 
             return {
                 "is_running": self.is_running,
@@ -281,7 +301,8 @@ class BackgroundTasks:
                 "last_update": datetime.now().isoformat()
             }
         except Exception as e:
-            logger.error(f"Error getting status: {str(e)}", exc_info=True)
+            logger.error(LogTemplates.STATUS_ERROR.substitute(
+                error=str(e)), exc_info=True)
             return {
                 "error": str(e),
                 "is_running": self.is_running,
